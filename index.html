@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Image to Text</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 text-gray-800 p-6">
+  <div class="max-w-xl mx-auto bg-white shadow-lg rounded-lg p-6">
+    <h1 class="text-2xl font-bold mb-4 text-center">Image to Text Converter</h1>
+
+    <input type="file" id="imageInput" accept="image/*" class="block w-full mb-4 p-2 border rounded" />
+
+    <div id="loader" class="text-center hidden">⏳ Recognizing text...</div>
+
+    <textarea id="resultText" rows="10" class="w-full p-3 border rounded resize-none mb-4" placeholder="Recognized text will appear here..."></textarea>
+
+    <div class="flex justify-between">
+      <button id="copyBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Copy</button>
+      <button id="downloadBtn" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Download TXT</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
