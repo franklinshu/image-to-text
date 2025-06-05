@@ -397,7 +397,6 @@
                 <div class="language-selector">
                     <label for="languageSelect">Select OCR Language:</label>
                     <select id="languageSelect">
-                        <option value="auto">Auto Detect</option>
                         <option value="eng">English</option>
                         <option value="chi_sim">Chinese (Simplified)</option>
                         <option value="chi_tra">Chinese (Traditional)</option>
@@ -555,9 +554,9 @@
     </footer>
 
     <script>
-        // Space OCR API configuration
-        const SPACE_OCR_API_KEY = 'K81476568088957';
-        const SPACE_OCR_API_URL = 'https://api.space-ocr.com/v1/ocr';
+        // OCR.space API configuration (corrected API endpoint)
+        const OCR_SPACE_API_KEY = 'K81476568088957';
+        const OCR_SPACE_API_URL = 'https://api.ocr.space/parse/image';
 
         // File upload functionality
         const uploadArea = document.getElementById('uploadArea');
@@ -684,32 +683,168 @@
             }
         }
 
-        async function performOCR(base64Image) {
-            const formData = new FormData();
+        // 替换原有的performOCR函数
+async function performOCR(base64Image) {
+    try {
+        // 方案1：使用代理服务器或CORS代理
+        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+        const apiUrl = proxyUrl + OCR_SPACE_API_URL;
+        
+        // 准备表单数据
+        const formData = new FormData();
+        
+        // 从base64转换为blob
+        const response = await fetch(base64Image);
+        const blob = await response.blob();
+        
+        formData.append('file', blob);
+        formData.append('apikey', OCR_SPACE_API_KEY);
+        formData.append('language', getOCRSpaceLanguage(languageSelect.value));
+        formData.append('isOverlayRequired', 'false');
+        formData.append('detectOrientation', 'true');
+        formData.append('scale', 'true');
+        formData.append('OCREngine', '2');
+        
+        const ocrResponse = await fetch(apiUrl, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        if (!ocrResponse.ok) {
+            throw new Error(`OCR API error: ${ocrResponse.status} ${ocrResponse.statusText}`);
+        }
+        
+        const result = await ocrResponse.json();
+        
+        if (result.IsErroredOnProcessing) {
+            throw new Error(result.ErrorMessage || 'OCR processing failed');
+        }
+        
+        if (!result.ParsedResults || result.ParsedResults.length === 0) {
+            throw new Error('No text found in the image');
+        }
+        
+        const extractedText = result.ParsedResults[0].ParsedText;
+        
+        return {
+            text: extractedText,
+            confidence: result.ParsedResults[0].TextOverlay ? result.ParsedResults[0].TextOverlay.HasOverlay : null
+        };
+        
+    } catch (error) {
+        console.error('OCR processing error:', error);
+        
+        // 方案2：降级为客户端OCR（如果CORS代理也失败）
+        return await performClientSideOCR(base64Image);
+    }
+}
+
+// 备用的客户端OCR方案
+async function performClientSideOCR(base64Image) {
+    try {
+        // 使用Tesseract.js作为备用方案
+        // 注意：需要在HTML中添加Tesseract.js库
+        if (typeof Tesseract !== 'undefined') {
+            const { createWorker } = Tesseract;
+            const worker = createWorker();
             
-            // Convert base64 back to blob for FormData
-            const response = await fetch(base64Image);
-            const blob = await response.blob();
+            await worker.load();
+            await worker.loadLanguage(getTesseractLanguage(languageSelect.value));
+            await worker.initialize(getTesseractLanguage(languageSelect.value));
             
-            formData.append('image', blob, selectedFile.name);
-            formData.append('language', languageSelect.value);
+            const { data: { text } } = await worker.recognize(base64Image);
+            await worker.terminate();
             
-            const ocrResponse = await fetch(SPACE_OCR_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${SPACE_OCR_API_KEY}`,
-                },
-                body: formData
-            });
+            return {
+                text: text,
+                confidence: null
+            };
+        } else {
+            // 如果没有可用的OCR库，返回模拟文本提示用户
+            throw new Error('OCR service unavailable. Please try again later or use a different image.');
+        }
+    } catch (error) {
+        throw new Error('Client-side OCR failed: ' + error.message);
+    }
+}
+
+// Tesseract.js语言码映射
+function getTesseractLanguage(code) {
+    const languageMap = {
+        'eng': 'eng',
+        'chi_sim': 'chi_sim',
+        'chi_tra': 'chi_tra',
+        'hin': 'hin',
+        'spa': 'spa',
+        'ben': 'ben',
+        'por': 'por',
+        'rus': 'rus',
+        'jpn': 'jpn'
+    };
+    return languageMap[code] || 'eng';
+}
+
+// 改进的错误处理
+async function convertImageToWord() {
+    try {
+        convertBtn.disabled = true;
+        progressSection.style.display = 'block';
+        hideError();
+        
+        updateProgress(10, 'Preparing image...');
+        
+        const base64Image = await fileToBase64(selectedFile);
+        
+        updateProgress(30, 'Processing with OCR...');
+        
+        // 添加超时处理
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Request timeout - please try again')), 30000)
+        );
+        
+        const ocrResult = await Promise.race([
+            performOCR(base64Image),
+            timeoutPromise
+        ]);
+        
+        updateProgress(70, 'Processing extracted text...');
+        
+        if (ocrResult && ocrResult.text) {
+            extractedText = ocrResult.text.trim();
             
-            if (!ocrResponse.ok) {
-                const errorData = await ocrResponse.json().catch(() => ({}));
-                throw new Error(errorData.message || `OCR API error: ${ocrResponse.status}`);
+            if (!extractedText) {
+                throw new Error('No readable text found in the image. Please ensure the image contains clear, readable text.');
             }
             
-            return await ocrResponse.json();
+            previewText.textContent = extractedText;
+            previewSection.style.display = 'block';
+            
+            updateProgress(100, 'Conversion completed!');
+            
+            setTimeout(() => {
+                progressSection.style.display = 'none';
+                convertBtn.disabled = false;
+            }, 1000);
+        } else {
+            throw new Error('No text extracted from the image');
         }
-
+        
+    } catch (error) {
+        console.error('Conversion error:', error);
+        
+        let errorMsg = error.message;
+        if (error.message.includes('Failed to fetch')) {
+            errorMsg = 'Connection failed. Please check your internet connection and try again.';
+        }
+        
+        showError(`Conversion failed: ${errorMsg}`);
+        progressSection.style.display = 'none';
+        convertBtn.disabled = false;
+    }
+}
         function fileToBase64(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -795,6 +930,23 @@
                 console.error('Word generation error:', error);
                 showError('Failed to generate Word document');
             }
+        }
+
+        function getOCRSpaceLanguage(code) {
+            // OCR.space language codes mapping
+            const languageMap = {
+                'auto': 'eng', // OCR.space doesn't have auto-detect, default to English
+                'eng': 'eng',
+                'chi_sim': 'chs', // Chinese Simplified
+                'chi_tra': 'cht', // Chinese Traditional
+                'hin': 'hin',
+                'spa': 'spa',
+                'ben': 'ben',
+                'por': 'por',
+                'rus': 'rus',
+                'jpn': 'jpn'
+            };
+            return languageMap[code] || 'eng';
         }
 
         function getLanguageName(code) {
