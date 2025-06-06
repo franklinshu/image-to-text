@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13,7 +14,13 @@
     <meta property="og:description" content="Convert images to Word documents instantly. Free, secure, and no registration required.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://jpgtoword.online">
-    
+    <!-- Add docx library for Word document generation -->   
+	<!-- docx.js -->
+	<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.min.js"></script>
+
+	<!-- FileSaver.js -->
+	<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+
     <!-- Schema Markup -->
     <script type="application/ld+json">
     {
@@ -32,9 +39,8 @@
     }
     </script>
     
-    <!-- Add docx library for Word document generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.1.0/docx.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  
+
     
     <style>
         * {
@@ -365,6 +371,7 @@
     </style>
 </head>
 <body>
+ 
     <header>
         <div class="container">
             <div class="header-content">
@@ -554,7 +561,7 @@
     </footer>
 
     <script>
-       // OCR.space API configuration (corrected API endpoint)
+        // OCR.space API configuration (corrected API endpoint)
 const OCR_SPACE_API_KEY = 'K81476568088957';
 const OCR_SPACE_API_URL = 'https://api.ocr.space/parse/image';
 
@@ -960,74 +967,367 @@ downloadBtn.addEventListener('click', () => {
     
     generateWordDocument();
 });
-
+// 修复后的Word文档生成函数
 function generateWordDocument() {
     try {
-        // Create a new document
-        const doc = new docx.Document({
-            sections: [{
-                properties: {},
+        // 检查必要的库是否已加载
+        if (typeof docx === 'undefined') {
+            showError('Word generation library not loaded. Please refresh the page and try again.');
+            return;
+        }
+        
+        if (typeof saveAs === 'undefined') {
+            showError('File save library not loaded. Please refresh the page and try again.');
+            return;
+        }
+        
+        // 检查是否有提取的文本
+        if (!extractedText || extractedText.trim() === '') {
+            showError('No text available to generate Word document');
+            return;
+        }
+        
+        // 显示生成进度
+        showProgress('Generating Word document...');
+        
+        // 创建文档段落数组
+        const paragraphs = [];
+        
+        // 添加标题
+        paragraphs.push(
+            new docx.Paragraph({
                 children: [
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: "Extracted Text from Image",
-                                bold: true,
-                                size: 28,
-                            }),
-                        ],
-                        spacing: {
-                            after: 200,
-                        },
+                    new docx.TextRun({
+                        text: "Extracted Text from Image",
+                        bold: true,
+                        size: 32, // 文档中的size单位是半点，所以32 = 16pt
+                        font: "Arial"
                     }),
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: `Source: ${selectedFile.name}`,
-                                italics: true,
-                            }),
-                        ],
-                        spacing: {
-                            after: 200,
-                        },
-                    }),
-                    new docx.Paragraph({
-                        children: [
-                            new docx.TextRun({
-                                text: `Language: ${getLanguageName(languageSelect.value)}`,
-                                italics: true,
-                            }),
-                        ],
-                        spacing: {
-                            after: 400,
-                        },
-                    }),
-                    ...extractedText.split('\n').map(line => 
-                        new docx.Paragraph({
-                            children: [
-                                new docx.TextRun({
-                                    text: line || ' ', // Empty line fallback
-                                }),
-                            ],
-                            spacing: {
-                                after: 120,
-                            },
-                        })
-                    ),
                 ],
-            }],
-        });
-
-        // Generate and download the document
-        docx.Packer.toBlob(doc).then(blob => {
-            const fileName = `${selectedFile.name.split('.')[0]}_extracted_text.docx`;
-            saveAs(blob, fileName);
+                spacing: {
+                    after: 400,
+                },
+                alignment: docx.AlignmentType.CENTER
+            })
+        );
+        
+        // 添加分隔线
+        paragraphs.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: "─".repeat(50),
+                        color: "666666"
+                    }),
+                ],
+                spacing: {
+                    after: 300,
+                },
+                alignment: docx.AlignmentType.CENTER
+            })
+        );
+        
+        // 添加源文件信息
+        if (selectedFile) {
+            paragraphs.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: "Source File: ",
+                            bold: true,
+                            font: "Arial"
+                        }),
+                        new docx.TextRun({
+                            text: selectedFile.name,
+                            italics: true,
+                            font: "Arial"
+                        }),
+                    ],
+                    spacing: {
+                        after: 200,
+                    },
+                })
+            );
+        }
+        
+        // 添加语言信息
+        if (languageSelect && languageSelect.value) {
+            paragraphs.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: "Language: ",
+                            bold: true,
+                            font: "Arial"
+                        }),
+                        new docx.TextRun({
+                            text: getLanguageName(languageSelect.value),
+                            italics: true,
+                            font: "Arial"
+                        }),
+                    ],
+                    spacing: {
+                        after: 200,
+                    },
+                })
+            );
+        }
+        
+        // 添加生成时间
+        paragraphs.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: "Generated: ",
+                        bold: true,
+                        font: "Arial"
+                    }),
+                    new docx.TextRun({
+                        text: new Date().toLocaleString(),
+                        italics: true,
+                        font: "Arial"
+                    }),
+                ],
+                spacing: {
+                    after: 400,
+                },
+            })
+        );
+        
+        // 添加内容标题
+        paragraphs.push(
+            new docx.Paragraph({
+                children: [
+                    new docx.TextRun({
+                        text: "Extracted Content:",
+                        bold: true,
+                        size: 28,
+                        font: "Arial"
+                    }),
+                ],
+                spacing: {
+                    after: 300,
+                },
+            })
+        );
+        
+        // 处理提取的文本内容
+        const lines = extractedText.split('\n');
+        lines.forEach((line, index) => {
+            paragraphs.push(
+                new docx.Paragraph({
+                    children: [
+                        new docx.TextRun({
+                            text: line.trim() || ' ', // 空行用空格替代
+                            font: "Arial",
+                            size: 24 // 12pt
+                        }),
+                    ],
+                    spacing: {
+                        after: 160, // 段落间距
+                    },
+                    indent: {
+                        left: 200, // 左缩进
+                    }
+                })
+            );
         });
         
+        // 创建文档
+        const doc = new docx.Document({
+            sections: [{
+                properties: {
+                    page: {
+                        margin: {
+                            top: 1440,    // 1英寸 = 1440 twips
+                            right: 1440,
+                            bottom: 1440,
+                            left: 1440,
+                        },
+                    },
+                },
+                children: paragraphs
+            }],
+            creator: "OCR Image to Word Converter",
+            title: "Extracted Text Document",
+            description: `Extracted text from ${selectedFile ? selectedFile.name : 'image'}`
+        });
+
+        // 生成并下载文档
+        docx.Packer.toBlob(doc)
+            .then(blob => {
+                hideProgress();
+                
+                // 生成文件名
+                let fileName = 'extracted_text.docx';
+                if (selectedFile) {
+                    const baseName = selectedFile.name.split('.')[0];
+                    fileName = `${baseName}_extracted_text.docx`;
+                }
+                
+                // 下载文件
+                saveAs(blob, fileName);
+                
+                // 显示成功消息
+                showSuccess('Word document generated and downloaded successfully!');
+            })
+            .catch(error => {
+                hideProgress();
+                console.error('Document generation error:', error);
+                showError('Failed to generate Word document: ' + error.message);
+            });
+        
     } catch (error) {
+        hideProgress();
         console.error('Word generation error:', error);
-        showError('Failed to generate Word document');
+        
+        // 提供详细的错误信息
+        let errorMessage = 'Failed to generate Word document';
+        if (error.message) {
+            errorMessage += ': ' + error.message;
+        }
+        
+        // 检查常见问题
+        if (error.message && error.message.includes('docx')) {
+            errorMessage += '\n\nPossible solutions:\n• Refresh the page and try again\n• Check your internet connection\n• Try with a smaller text content';
+        }
+        
+        showError(errorMessage);
     }
+}
+
+// 辅助函数：显示进度
+function showProgress(message) {
+    // 如果有进度条元素，显示它
+    if (progressSection) {
+        progressSection.style.display = 'block';
+        updateProgress(50, message);
+    }
+    
+    // 禁用下载按钮
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.textContent = 'Generating...';
+    }
+}
+
+// 辅助函数：隐藏进度
+function hideProgress() {
+    // 隐藏进度条
+    if (progressSection) {
+        progressSection.style.display = 'none';
+    }
+    
+    // 恢复下载按钮
+    if (downloadBtn) {
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = 'Download Word Document';
+    }
+}
+
+// 辅助函数：显示成功消息
+function showSuccess(message) {
+    // 创建成功消息元素（如果不存在）
+    let successMessage = document.getElementById('successMessage');
+    if (!successMessage) {
+        successMessage = document.createElement('div');
+        successMessage.id = 'successMessage';
+        successMessage.style.cssText = `
+            background-color: #d4edda;
+            color: #155724;
+            padding: 12px 20px;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+            font-family: Arial, sans-serif;
+        `;
+        
+        // 插入到错误消息附近
+        if (errorMessage && errorMessage.parentNode) {
+            errorMessage.parentNode.insertBefore(successMessage, errorMessage.nextSibling);
+        }
+    }
+    
+    successMessage.textContent = message;
+    successMessage.style.display = 'block';
+    
+    // 3秒后自动隐藏
+    setTimeout(() => {
+        successMessage.style.display = 'none';
+    }, 3000);
+}
+
+// 改进的下载按钮事件处理
+if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+        if (!extractedText || extractedText.trim() === '') {
+            showError('No text available to download. Please extract text from an image first.');
+            return;
+        }
+        
+        generateWordDocument();
+    });
+}
+
+// 检查库是否已加载的函数
+function checkLibrariesLoaded() {
+    const issues = [];
+    
+    if (typeof docx === 'undefined') {
+        issues.push('docx library not loaded');
+    }
+    
+    if (typeof saveAs === 'undefined') {
+        issues.push('FileSaver library not loaded');
+    }
+    
+    if (issues.length > 0) {
+        console.warn('Library loading issues:', issues);
+        return false;
+    }
+    
+    return true;
+}
+
+// 页面加载时检查库
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if (!checkLibrariesLoaded()) {
+            console.warn('Some libraries may not be loaded properly. Word document generation may fail.');
+        }
+    }, 1000);
+});
+
+// 动态加载库的备用方案
+async function loadRequiredLibraries() {
+    try {
+        // 加载docx库
+        if (typeof docx === 'undefined') {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.min.js');
+        }
+        
+        // 加载FileSaver库
+        if (typeof saveAs === 'undefined') {
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js');
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Failed to load required libraries:', error);
+        return false;
+    }
+}
+
+// 动态加载脚本的辅助函数
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
 }
 
 // 语言映射函数
@@ -1107,5 +1407,6 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
     </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"rayId":"94b8ee107e1e843a","version":"2025.5.0","r":1,"token":"9a70110cd6b94bc698b2157ebfc42dca","serverTiming":{"name":{"cfExtPri":true,"cfEdge":true,"cfOrigin":true,"cfL4":true,"cfSpeedBrain":true,"cfCacheStatus":true}}}' crossorigin="anonymous"></script>
 </body>
 </html>
